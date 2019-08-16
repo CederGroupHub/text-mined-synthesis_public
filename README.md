@@ -9,15 +9,6 @@ This repo contains necessary codes and modules built to create the solid-state r
 1. Kononova, O., Huo, H., He, T., Rong Z., Botari, T., Sun, W., Tshitoyan, V. and Ceder, G., 2019. Text-mined dataset of inorganic materials synthesis recipes. Scientific Data, (submitted).
 2. Huo, H., Rong, Z., Kononova, O., Sun, W., Botari, T., He, T., Tshitoyan, V. and Ceder, G., 2019. Semi-supervised machine-learning classification of materials synthesis procedures. npj Computational Materials, 5(1), p.62.
 
-## Modules
-
-The codes listed in this repo are different parts of the synthesis extraction pipeline:
-
-- Borges: Borges is a scraping engine for downloading journal articles.
-- MarkupParser-LimeSoup: LimeSoup parses HTML or XML papers from different publishers. It extracts all plain text paragraphs, and section headings.
-- MatEntityRecognition: the MER module extracts materials from paragraphs, and recognizes precursor (input) and target (output) materials in a solid-state synthesis.
-- ReactionCompleter: the module computes valid chemical reactions using list of precursor and target materials.
-
 ## Getting help
 
 All questions on the solid-state synthesis dataset should go to the dedicated Google Group [https://groups.google.com/forum/#!forum/text-mined-synthesis-users](https://groups.google.com/forum/#!forum/text-mined-synthesis-users).
