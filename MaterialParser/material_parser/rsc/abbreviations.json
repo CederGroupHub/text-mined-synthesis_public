@@ -1,0 +1,18 @@
+{
+  "YAG": "Y3Al5O12",
+  "EDTA": "C10H16N2O8",
+  "PZT": "Pb(ZrxTi1-x)O3",
+  "NASICON": "Na1+xZr2SixP3-xO12",
+  "CTAB": "CH3(CH2)15N(Br)(CH3)3",
+  "LSMO": "La1-xSrxMnO3",
+  "PMN": "Pb(Mg1/3Nb2/3)O3",
+  "PT": "PbTiO3",
+  "LSGM": "La1-xSrxGa1-yMgyO3",
+  "NBT": "Na0.5Bi0.5TiO3",
+  "LMT": "La(Mg0.5Ti0.5)O3",
+  "BT": "BaTiO3",
+  "KNN": "K0.5Na0.5NbO3",
+  "BNT": "Bi0.5Na0.5TiO3",
+  "BTO": "BaTiO3",
+  "TEAB": "C8H20NBr"
+}

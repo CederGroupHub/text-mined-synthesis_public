@@ -1,0 +1,18 @@
+src/
+build/
+dist/
+*.egg-info/
+
+# mac specific #
+.DS_store
+
+# pycharm files #
+*/.idea/**
+.idea/
+.idea/**
+
+*/__pycache__/
+
+material_parser/pub_chem_dictionary_x
+material_parser/run.py
+recipe_extractor/run.py

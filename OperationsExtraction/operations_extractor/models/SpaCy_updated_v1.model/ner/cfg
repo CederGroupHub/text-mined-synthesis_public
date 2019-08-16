@@ -1,0 +1,13 @@
+{
+  "cnn_maxout_pieces":3,
+  "hidden_width":200,
+  "beam_density":0.0,
+  "beam_width":1,
+  "maxout_pieces":2,
+  "hidden_depth":1,
+  "token_vector_width":128,
+  "nr_class":73,
+  "hist_width":0,
+  "hist_size":0,
+  "pretrained_dims":0
+}
