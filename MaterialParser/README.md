@@ -1,9 +1,5 @@
-# Material Parser and Reactions Extractor
-
-The package consists of two modules:
-
- * Material Parser: class to extract composition of a given material
- * Recipe Extractor: wrapping class on Material Parser
+# Material Parser
+class to extract composition of a given material
 
 **Material Parser** processes one material entity per run, and allows for:
 
@@ -12,22 +8,6 @@ The package consists of two modules:
  * finding values of stoichiometric and elements variables,
  * splitting mixtures/composites/alloys/solid solutions into compounds
  * reconstructing chemical formula from chemical name
-
-**Recipe Extractor** is a wrapper on top of Material Parser.
-It combines methods from Material Parser class into pipeline to build recipe: targets and their precursors.
-As an input it uses list of materials found in abstract and synthesis paragraph together with the corresponsing text sentences.
-It is specifically designed for the output and purposes of our project.
-However, it can serve as an example of Material Parser usage.
-
-**Recipe Extractor** does the following:
-
- * uses text sentences to build abbreviation vocabulary for all abbreviation found in materials list
- * resolves abbreviations in materials list (substitute formula instead of abbreviation)
- * if targets list is empty, uses targets from abstract
- * obtains materials compositions
- * substitutes values of stoichiometric and elements parameters
-
-Matching of elements and constructing list of unbalanced reaction are suppressed after version 3
  
 ### Installation:
 ```
@@ -41,8 +21,6 @@ pip install -r requirements.txt -e .
 from material_parser import MaterialParser
 mp = MaterialParser(verbose=False, pubchem_lookup=False, fails_log=False)
 
-from recipe_extractor import recipe_extractor
-rex = RecipeExtractor()
 ```
 
 ### Material parser
@@ -167,43 +145,4 @@ rex = RecipeExtractor()
     :param var: <str> variable name
     :param sentence: <str> sentence to look for
     :return: <list> of <str> found values
-    ```
-
-### Recipe extractor:
-
- * rex.get_composition(abstract_materials_, synthesis_materials, abstract=None, syn_paragraph=None)
-    ```
-    main method to convert list of materials into composition
-    based on output of MER
-    :param abstract_materials_: <dict> targets: list of materials
-                                        precursors: list of materials
-                                        others: list of materials
-    :param synthesis_materials: <dict> targets: list of materials
-                                        precursors: list of materials
-                                        others: list of materials
-    :param abstract: <list> of <str> abstract sentences
-    :param syn_paragraph: <list> of <str> paragraph sentences
-    :return: output_structure: <dict> targets: list of material structures (output of mp.parse_material)
-                                      precursors: list of material structures
-                                      targets: list of material structures (output of mp.parse_material)
-                                      others: list of material structures
-            fails: <dict> targets: list of failed material strings
-                          precursors: list of failed material strings
-                          targets: list of failed material strings
-                          others: list of failed material strings
-            abbreviations: <dict> abbreviation: corresponding name
-    ```
-
- * rex.substitute_elements(material_structure)
-    ```
-    substituting values for elements variables into formula
-    :param material_structure: <dict> output of mp.parse_material() with filled "element_vars"
-    :return: list of structures derived from input with substitution of all element_vars
-    ```
-
- * rex.substitute_fraction(material_structure)
-    ```
-    substituting values for elements fractions variables into formula
-    :param material_structure: <dict> output of mp.parse_material() with filled "fraction_vars"
-    :return: list of structures derived from input with substitution of all fraction_vars
     ```
