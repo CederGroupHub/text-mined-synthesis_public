@@ -11,6 +11,4 @@ This repo contains necessary codes and modules built to create the solid-state r
 
 ## Getting help
 
-All questions on the solid-state synthesis dataset should go to the dedicated Google Group [https://groups.google.com/forum/#!forum/text-mined-synthesis-users](https://groups.google.com/forum/#!forum/text-mined-synthesis-users).
-
-If you find bugs in specific codes (no questions please), please go to the corresponding repo to submit a issue. Thanks!
+If you have questions about the project, please submit a issue or contact us ([cedergroup-ml-team@lbl.gov](mailto:cedergroup-ml-team@lbl.gov)). Thanks!
