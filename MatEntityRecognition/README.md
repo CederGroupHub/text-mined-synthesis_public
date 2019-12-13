@@ -7,7 +7,7 @@ Install:
 	If Git Large File Storage (lfs) is not installed on your computer, please install it fistly following the instruction on
 		https://help.github.com/articles/installing-git-large-file-storage/.
 	Then
-		git clone git@github.com:CederGroupHub/MatEntityRecognition.git 
+		git clone git@github.com:CederGroupHub/text-mined-synthesis_public.git
 		cd MatEntityRecognition
 		pip install -e .
 	
