@@ -11,7 +11,7 @@ class to extract composition of a given material
  
 ### Installation:
 ```
-git clone https://github.com/CederGroupHub/MaterialParser.git
+git clone https://github.com/CederGroupHub/text-mined-synthesis_public.git
 cd MaterialParser
 pip install -r requirements.txt -e .
 ```
