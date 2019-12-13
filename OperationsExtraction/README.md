@@ -8,7 +8,7 @@
  
 ### Installation:
 ```
-git clone https://github.com/CederGroupHub/OperationsExtraction.git
+git clone https://github.com/CederGroupHub/text-mined-synthesis_public.git
 cd OperationsExtraction
 python setup.py install
 ```
