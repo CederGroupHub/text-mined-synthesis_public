@@ -1,5 +1,5 @@
 
-from material_parser import MaterialParser
+from material_parser.material_parser import MaterialParser
 
 __author__ = 'Tanjin He'
 __maintainer__ = 'Tanjin He, Ziqin (Shaun) Rong'
@@ -42,10 +42,10 @@ def parse_material(material_text, para_text):
     # goal
     parsed_material = {'dopants': None, 'composition': None}
     #     get dopants
-    dopants, new_material = mp.get_additives(material_text)
+    dopants, new_material = mp.separate_additives(material_text)
 
     #     get abbreviation
-    tmp_abbr = mp.build_abbreviations_dict([new_material], [para_text])
+    tmp_abbr = mp.build_acronyms_dict([new_material], [para_text])
     new_material2 = []
     if new_material in tmp_abbr:
         new_material2 = tmp_abbr[new_material]
@@ -55,38 +55,47 @@ def parse_material(material_text, para_text):
     if len(dopants) > 0:
         parsed_material['dopants'] = dopants
     try:
-        list_of_materials = mp.reconstruct_list_of_materials(new_material2)
+        # material parser version 6.0.3
+        list_of_materials = mp.split_materials_list(new_material2)
         list_of_materials = list_of_materials if list_of_materials != [] else [(new_material2, '')]
         tmp_structure = []
         for m, val in list_of_materials:
-            tmp_structure.append(mp.parse_material(m))
+            tmp_structure.extend(mp.parse_material_string(m)['composition'])
         tmp_comp = merge_struct_comp(tmp_structure)
         if tmp_comp != None and len(tmp_comp) > 0:
             parsed_material['composition'] = tmp_comp
         else:
             # print('unresolved')
             pass
-    except:
-        print('unresolved')
+    except Exception as e:
+        print('Error!', e)
         pass
     return parsed_material
 
 
-# used to merge structure compositions from material parser
+# used to merge structure compositions from material parser v3
+# struct_list is [{'composition': {'material': {'composition': composition_dict}}}]
 def merge_struct_comp(struct_list):
     # goal
     combined_comp = {}
     all_comps = []
-    for tmp_struct in struct_list:
-        for t in tmp_struct['composition']:
-            if t.get('amount', 1) != 1:
-                tmp_comp = {}
-                for ele in t['elements']:
-                    tmp_comp[ele] = '(' + t['elements'][ele] + ')*(' + t['amount'] + ')'
-                all_comps.append(tmp_comp)
-            else:
-                all_comps.append(t['elements'])
 
+    # get all compositions from struct_list
+    for tmp_struct in struct_list:
+        if (set(tmp_struct['elements'].keys()) == {'H', 'O'}
+            and len(struct_list) > 1):
+            # not take H2O into account
+            continue
+        if tmp_struct.get('amount', '1.0') != '1.0':
+            # multiply by coefficient if amount is not 1
+            tmp_comp = {}
+            for ele, num in tmp_struct['elements'].items():
+                tmp_comp[ele] = '(' + num + ')*(' + tmp_struct['amount'] + ')'
+            all_comps.append(tmp_comp)
+        else:
+            all_comps.append(tmp_struct['elements'])
+
+    # combine all composition from struct_list
     for tmp_comp in all_comps:
         for k, v in tmp_comp.items():
             if k not in combined_comp:
@@ -94,6 +103,7 @@ def merge_struct_comp(struct_list):
             else:
                 combined_comp[k] += (' + ' + v)
     return combined_comp
+
 
 def count_metal_ele(material_text, para_text):
     metal_ele_num = 0

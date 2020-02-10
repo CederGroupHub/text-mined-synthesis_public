@@ -11,6 +11,7 @@ if __name__ == "__main__":
           author_email="tanjin_he@berkeley.edu",
           license="MIT License",
           packages=find_packages(),
+          include_package_data=True,
           install_requires=[
               'chemdataextractor',
               'theano',

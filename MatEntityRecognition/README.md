@@ -8,13 +8,14 @@ Install:
 		https://help.github.com/articles/installing-git-large-file-storage/.
 	Then
 		git clone git@github.com:CederGroupHub/text-mined-synthesis_public.git
-		cd MatEntityRecognition
+		cd text-mined-synthesis_public/MatEntityRecognition
 		pip install -e .
 	
 	Spacy is used. If there is an error saying 
 	    "Can't find model 'en'..." 
 	It is because the spacy data is not downloaded. Please use
 	    python -m spacy download en
+	MaterialParser is used. Please download it from https://github.com/CederGroupHub/MaterialParser.
 
 Use:
 
@@ -26,5 +27,4 @@ Parameters:
 
 	Input: plain text of a paragraph  
 	Output: 4 list objects, which are all materials, precursors, targets, other materials, respectively.  
-
 
