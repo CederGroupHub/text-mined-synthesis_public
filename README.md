@@ -13,6 +13,10 @@ Dataset:
 Paragraphs classification:
 
  - Huo, H., Rong, Z., Kononova, O., Sun, W., Botari, T., He, T., Tshitoyan, V. and Ceder, G., 2019. Semi-supervised machine-learning classification of materials synthesis procedures. npj Computational Materials, 5(1), p.62.
+ 
+## Versions
+
+- [2020-07-13] Updated dataset 31782 solid state reactions and 9518 sol-gel precursor synthesis reactions. Updated data schema is [dataset_typing.py](dataset_typing.py).
 
 ## Getting help
 
