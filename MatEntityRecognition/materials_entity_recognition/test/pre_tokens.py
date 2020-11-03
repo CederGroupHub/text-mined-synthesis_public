@@ -1,5 +1,7 @@
 import json
 import random
+from pprint import pprint
+
 import chemdataextractor as CDE
 
 from materials_entity_recognition import MatRecognition
@@ -27,8 +29,9 @@ if __name__ == "__main__":
     model_new = MatRecognition()
     # # if enabling dependency parsing as feature
     # model_new = MatRecognition(parse_dependency=True)
+    pre_tokens = []
     for tmp_para in paras:
         CDE_para = CDE.doc.Paragraph(tmp_para)
-        pre_tokens = [tmp_sent.tokens for tmp_sent in CDE_para] 
-        result = model_new.mat_recognize(tmp_para, pre_tokens=pre_tokens)
-
+        pre_tokens.append([tmp_sent.tokens for tmp_sent in CDE_para])
+    result = model_new.mat_recognize(paras, pre_tokens=pre_tokens)
+    pprint(result)

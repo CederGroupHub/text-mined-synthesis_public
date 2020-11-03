@@ -6,19 +6,13 @@ __email__ = 'tanjin_he@berkeley.edu, rongzq08@gmail.com'
 
 if __name__ == "__main__":
     setup(name='materials_entity_recognition',
-          version=1.0,
+          version=2.0,
           author="Tanjin He",
           author_email="tanjin_he@berkeley.edu",
           license="MIT License",
           packages=find_packages(),
-          include_package_data=True,
           install_requires=[
-              'chemdataextractor',
-              'theano',
-              'spacy',
-              'unidecode',
-              "nltk",
-              'numpy',
-              'scipy',
+              'tensorflow-gpu>=2.1',
+              'tensorflow-addons>=0.8',
           ],
           zip_safe=False)

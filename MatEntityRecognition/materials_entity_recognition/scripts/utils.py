@@ -1,8 +1,16 @@
+import copy
 import os
 import re
-import codecs
+import sys
+import copy
+
 import numpy as np
-import theano
+import collections
+import tensorflow as tf
+import psutil
+import importlib
+from pprint import pprint
+from typing import List, Dict
 
 __author__ = 'Tanjin He'
 __maintainer__ = 'Tanjin He, Ziqin (Shaun) Rong'
@@ -10,57 +18,82 @@ __email__ = 'tanjin_he@berkeley.edu, rongzq08@gmail.com'
 
 # Modified based on the NER Tagger code from arXiv:1603.01360 [cs.CL]
 
-def get_name(parameters):
-    """
-    Generate a model name from its parameters.
+NEAR_ZERO = 1e-6
 
-    :param parameters
-    :return name
-    """
-    l = []
-    for k, v in list(parameters.items()):
-        if type(v) is str and "/" in v:
-            l.append((k, v[::-1][:v[::-1].index('/')][::-1]))
+def print_gpu_info():
+    gpus = tf.config.experimental.list_physical_devices('GPU')
+    logical_gpus = tf.config.experimental.list_logical_devices('GPU')
+    print(len(gpus), "Physical GPUs,", len(logical_gpus), "Logical GPUs")
+
+def allow_gpu_growth():
+    gpus = tf.config.experimental.list_physical_devices('GPU')
+    if gpus:
+        num_python_proc = 0
+        path = os.path.abspath('.')
+        tmp_m = re.match('.*MER_([0-9]+).*', path)
+        if tmp_m:
+            num_python_proc = int(tmp_m.group(1))
         else:
-            l.append((k, v))
-    name = ",".join(["%s=%s" % (k, str(v).replace(',', '')) for k, v in l])
-    return "".join(i for i in name if i not in "\/:*?<>|")
+            for proc in psutil.process_iter():
+                if 'python' in proc.name():
+                    num_python_proc += 1
+        try:
+            # Currently, memory growth needs to be the same across GPUs
+            # use gpu
+            gpu_to_use = gpus[num_python_proc % len(gpus)]
+            tf.config.experimental.set_visible_devices(gpu_to_use, 'GPU')
+            tf.config.experimental.set_memory_growth(gpu_to_use, True)
+            # # use cpu
+            # tf.config.experimental.set_visible_devices([], 'GPU')
+            # for gpu in gpus:
+            #     tf.config.experimental.set_memory_growth(gpu, True)
+            logical_gpus = tf.config.experimental.list_logical_devices('GPU')
+            print(len(gpus), "Physical GPUs,", len(logical_gpus), "Logical GPUs")
+        except RuntimeError as e:
+            # Memory growth must be set before GPUs have been initialized
+            print(e)
 
+if os.environ.get('tf_allow_gpu_growth', 'False') != 'True':
+    allow_gpu_growth()
+    os.environ['tf_allow_gpu_growth'] = 'True'
 
-def set_values(name, param, pretrained):
-    """
-    Initialize a network parameter with pretrained values.
-    We check that sizes are compatible.
+class Unbuffered(object):
+   def __init__(self, stream):
+       self.stream = stream
+   def write(self, data):
+       self.stream.write(data)
+       self.stream.flush()
+   def writelines(self, datas):
+       self.stream.writelines(datas)
+       self.stream.flush()
+   def __getattr__(self, attr):
+       return getattr(self.stream, attr)
 
-    :param name: name of network
-    :param param: parameters
-    :param pretrained: pretrained values 
-    """
-    param_value = param.get_value()
-    if pretrained.size != param_value.size:
-        raise Exception(
-            "Size mismatch for parameter %s. Expected %i, found %i."
-            % (name, param_value.size, pretrained.size)
-        )
-    param.set_value(np.reshape(
-        pretrained, param_value.shape
-    ).astype(np.float32))
+def found_package(package_name):
+    pkg_check = importlib.util.find_spec(package_name)
+    found = pkg_check is not None
+    return found
 
+def use_file_as_stdout(file_path):
+    if not os.path.exists(file_path):
+        os.makedirs(os.path.dirname(file_path))
+    sys.stdout = open(file_path, 'w')
+    sys.stdout = Unbuffered(sys.stdout)
+    print('this is printed in the console')
 
-def shared(shape, name):
-    """
-    Create a shared object of a numpy array.
-
-    :param shape: shape of array
-    :param name: name of array
-    :return shared object of a numpy array.
-    """
-    if len(shape) == 1:
-        value = np.zeros(shape)  # bias are initialized with zeros
+def parse_lr_method(lr_method, delimiter='@'):
+    # Parse optimization method parameters
+    if delimiter in lr_method:
+        lr_method_name = lr_method[:lr_method.find(delimiter)]
+        lr_method_parameters = {}
+        for x in lr_method[lr_method.find(delimiter) + 1:].split(delimiter):
+            split = x.split('=')
+            assert len(split) == 2
+            lr_method_parameters[split[0]] = float(split[1])
     else:
-        drange = np.sqrt(6. / (np.sum(shape)))
-        value = drange * np.random.uniform(low=-1.0, high=1.0, size=shape)
-    return theano.shared(value=value.astype(theano.config.floatX), name=name)
+        lr_method_name = lr_method
+        lr_method_parameters = {}
+    return lr_method_name, lr_method_parameters
 
 
 def create_dico(item_list):
@@ -85,13 +118,15 @@ def create_mapping(dico):
     """
     Create a mapping (item to ID / ID to item) from a dictionary.
     Items are ordered by decreasing frequency.
+    0 is not used as id because 0 is usually used as padding/masks
+    to avoid confusion, 0 is not used as id
 
     :param dico: dictionary of items
     :return item_to_id: mapping from an item to a number (id) 
     :return item_to_id: mapping from a number (id) to an item
     """
     sorted_items = sorted(list(dico.items()), key=lambda x: (-x[1], x[0]))
-    id_to_item = {i: v[0] for i, v in enumerate(sorted_items)}
+    id_to_item = {i+1: v[0] for i, v in enumerate(sorted_items)}
     item_to_id = {v: k for k, v in list(id_to_item.items())}
     return item_to_id, id_to_item
 
@@ -208,7 +243,10 @@ def pad_word_chars(words):
     :return char_rev: padded list of lists of ints in the reversed direction
     :return char_pos: list of ints corresponding to the index of the last character of each word
     """
+    # TODO: pad along batch axis
     max_length = max([len(word) for word in words])
+    # avoiding zero-length tokens makes the program more robust
+    max_length = max(max_length, 1)
     char_for = []
     char_rev = []
     char_pos = []
@@ -218,48 +256,6 @@ def pad_word_chars(words):
         char_rev.append(word[::-1] + padding)
         char_pos.append(len(word) - 1)
     return char_for, char_rev, char_pos
-
-
-def create_input(data, parameters, add_label, singletons=None):
-    """
-    Take sentence data and return an input for
-    the training or the evaluation function.
-
-    :param data: a dict as sentence data
-    :param parameters: parameters of model
-    :param add_label: add tags for words or not
-    :param singletons: set of words only appear one time in training set
-    :return input: all input features correponding to a sentence 
-    """
-    words = data['words']
-    chars = data['chars']
-    if singletons is not None:
-        words = insert_singletons(words, singletons)
-    if parameters['cap_dim']:
-        caps = data['caps']
-    char_for, char_rev, char_pos = pad_word_chars(chars)
-    input = []
-    if parameters['word_dim']:
-        input.append(words)
-    if parameters['char_dim']:
-        input.append(char_for)
-        if parameters['char_bidirect']:
-            input.append(char_rev)
-        input.append(char_pos)
-    if parameters['cap_dim']:
-        input.append(caps)
-    if 'ele_num' in parameters and parameters['ele_num']:
-        input.append(data['ele_nums'])
-    if 'has_CHO' in parameters and parameters['has_CHO']:
-        input.append(data['has_CHOs'])
-    if 'topic_dim' in parameters and parameters['topic_dim']:
-        input.append(data['topics'])
-    if 'keyword_dim' in parameters and parameters['keyword_dim']:
-        input.append(data['key_words'])
-    if add_label:
-        input.append(data['tags'])
-    return input
-
 
 def find_one_entity_token_ids(sent_tokens, entity, start_to_calibrate=False):
     ids = []
@@ -275,5 +271,246 @@ def find_one_entity_token_ids(sent_tokens, entity, start_to_calibrate=False):
     assert sent_tokens[ids[-1]]['end'] == entity['end']
     entity['token_ids'] = ids
     return ids
+
+def find_sub_token(target_token, all_tokens):
+    """
+    find tokens in all_tokens which is substrings of target_token
+
+    :param target_token:
+    :param all_tokens:
+    :return:
+    """
+    sub_tokens = []
+    for tmp_token in all_tokens:
+        # skip some speical tokens (from BERT) such as [cls] [sep]
+        if tmp_token['start'] >= tmp_token['end']:
+            continue
+        if tmp_token['start'] >= target_token['start'] and \
+            tmp_token['end'] <= target_token['end']:
+            sub_tokens.append(tmp_token)
+    return sub_tokens
+
+
+def offset_tokens(tokens, offset):
+    """
+    shift token start and end with an offset
+
+    :param tokens:
+    :param offset:
+    :return:
+    """
+    reformated_tokens = copy.deepcopy(tokens)
+    for t in reformated_tokens:
+        t['start'] += offset
+        t['end'] += offset
+    return reformated_tokens
+
+
+def reformat_bert_tokens(bert_tokens, text: str):
+    """
+    reformat bert tokens to list of dicts
+
+    :param bert_tokens:
+    :param text:
+    :return:
+    """
+    reformated_tokens = []
+    for offset, token in zip(bert_tokens.offsets, bert_tokens.tokens):
+        reformated_tokens.append({
+            'start': offset[0],
+            'end': offset[1],
+            'text': text[offset[0]: offset[1]],
+            'bert_text': token,
+        })
+    return reformated_tokens
+
+
+def fix_missed_bert_tokens(
+    span_text: str,
+    tokens: List[Dict],
+    unk_token: str = '[UNK]'
+):
+    """
+    BertTokenizerFast from transformers incorrectly miss some non-ascii special characters.
+    We use this function to find them back
+
+    :param span_text:
+    :param tokens:
+    :param unk_token:
+    :return:
+    """
+    all_tokens = []
+    last_end = 0
+    if len(tokens) == 0:
+        tokens = [{
+            'start': len(span_text),
+            'end': len(span_text),
+            'text': '',
+        }]
+    for token in tokens:
+        if (
+            token['start'] > last_end
+            and len(span_text[last_end: token['start']].strip(' ')) > 0
+        ):
+            text = span_text[last_end: token['start']]
+            all_tokens.append({
+                'start': last_end + len(text) - len(text.lstrip(' ')),
+                'end': last_end + len(text.rstrip(' ')),
+                'text': text.strip(' '),
+                'bert_text': unk_token,
+            })
+        if token['end'] > token['start']:
+            all_tokens.append(token)
+        last_end = token['end']
+    return all_tokens
+
+
+def get_bert_tokens_in_span(
+        a_span: Dict,
+        bert_pieces: List,
+        unk_token: str = '[UNK]'
+):
+    """
+    Tokenize a span with bert tokenization results.
+    Input bert_pieces because bert_pieces can be obtained in batch.
+    Output does not contain [CLS] and [SEP]
+
+    :param a_span:
+    :param bert_pieces:
+    :param unk_token:
+    :return:
+    """
+    pieces_tokens = reformat_bert_tokens(
+        bert_tokens=bert_pieces,
+        text=a_span['text']
+    )
+    # For a span, we remove [CLS] and [SEP]
+    pieces_tokens = pieces_tokens[1:-1]
+
+    # transformers' fast tokenizer misses some special characters
+    pieces_tokens = fix_missed_bert_tokens(
+        a_span['text'], pieces_tokens, unk_token=unk_token
+    )
+    pieces_tokens = offset_tokens(pieces_tokens, a_span['start'])
+    return pieces_tokens
+
+
+def get_bert_tokens(tokenizer, sentence_text=None, pre_tokens=None):
+    """
+    Tokenize a sentence with a bert tokenizer.
+    Pure tokenization: [CLS] and [SEP] are not included in the output tokens.
+
+    :param tokenizer:
+    :param sentence_text:
+    :param pre_tokens:
+    :return:
+    """
+    bert_tokens = []
+    if pre_tokens is None:
+        pre_tokens = [{
+            'start': 0,
+            'end': len(sentence_text),
+            'text': sentence_text,
+        }]
+
+    # batch tokenization for acceleration
+    words = [token['text'] for token in pre_tokens]
+    word_pieces = tokenizer(words)
+    for i, token in enumerate(pre_tokens):
+        pieces_tokens = get_bert_tokens_in_span(
+            token, word_pieces[i], unk_token=tokenizer.unk_token
+        )
+        for t in pieces_tokens:
+            t['source_token_idx'] = i
+        bert_tokens.extend(pieces_tokens)
+
+    return bert_tokens
+
+
+def get_bert_input(tokenizer, sentence_text=None, pre_tokens=None):
+    """
+    Tokenize and encode a sentence with a bert tokenizer.
+    Used as input to a bert encoder: [CLS] and [SEP] are included in the output tokens.
+
+    :param tokenizer:
+    :param sentence_text:
+    :param pre_tokens:
+    :return:
+    """
+    bert_tokens = get_bert_tokens(
+        tokenizer=tokenizer,
+        sentence_text=sentence_text,
+        pre_tokens=pre_tokens
+    )
+    bert_tokens.insert(0, {
+        'start': 0,
+        'end': 0,
+        'text': '',
+        'bert_text': tokenizer.cls_token,
+    })
+    bert_tokens.append({
+        'start': 0,
+        'end': 0,
+        'text': '',
+        'bert_text': tokenizer.sep_token,
+    })
+    bert_pieces = [t['bert_text'] for t in bert_tokens]
+    bert_input = {
+        'tokens': bert_tokens,
+        'ids': tokenizer.convert_tokens_to_ids(bert_pieces),
+        'type_ids': [0] * len(bert_pieces),
+        'attention_mask': [1] * len(bert_pieces),
+    }
+    return bert_input
+
+
+def get_entities(sent_tokens):
+    """
+    Extract entities and their corresponding labels from annotated data
+    Assume the annotated labels are using IOB format
+
+    :param sent_tokens:
+    :return:
+    """
+    entities = []
+    # collect entities with labels other than 'O'
+    for token in sent_tokens:
+        if token['label'] != 'O':
+            tag = token['label'][2:].strip()
+            if token['label'][0] == 'B':
+                entities.append({
+                    'text': token['text'],
+                    'start': token['start'],
+                    'end': token['end'],
+                    'label': tag,
+                })
+                ner_tag = tag
+            elif token['label'][0] == 'S':
+                entities.append({
+                    'text': token['text'],
+                    'start': token['start'],
+                    'end': token['end'],
+                    'label': tag,
+                })
+                ner_tag = 'O'
+            elif (
+                token['label'][0] == 'I'
+                and tag == ner_tag
+            ):
+                entities[-1]['text'] += ' '*(token['start']-entities[-1]['end']) + token['text']
+                entities[-1]['end'] = token['end']
+            elif (
+                token['label'][0] == 'E'
+                and tag == ner_tag
+            ):
+                entities[-1]['text'] += ' '*(token['start']-entities[-1]['end']) + token['text']
+                entities[-1]['end'] = token['end']
+                ner_tag = 'O'
+            else:
+                print('Error! token tag invalid!')
+        else:
+            ner_tag = 'O'
+
+    return entities
 
 

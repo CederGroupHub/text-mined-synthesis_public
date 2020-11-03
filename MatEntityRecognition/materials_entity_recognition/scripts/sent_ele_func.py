@@ -1,5 +1,5 @@
-
 from material_parser.material_parser import MaterialParser
+import  regex
 
 __author__ = 'Tanjin He'
 __maintainer__ = 'Tanjin He, Ziqin (Shaun) Rong'
@@ -37,6 +37,8 @@ elementTable = {
 }
 allElements = list(elementTable.keys())
 allElements = sorted(allElements, key=lambda ele: len(ele), reverse=True)
+allEleText = '|'.join(allElements)
+pattern_species = regex.compile(r'^\b(((' + allEleText + r')[\·0-9]{0,5})+)\b$')
 
 def parse_material(material_text, para_text):
     # goal
@@ -68,19 +70,16 @@ def parse_material(material_text, para_text):
             # print('unresolved')
             pass
     except:
-        # print('unresolved')
+        print('unresolved')
         pass
     return parsed_material
 
 
-# used to merge structure compositions from material parser v3
-# struct_list is [{'composition': {'material': {'composition': composition_dict}}}]
+# used to merge structure compositions from material parser
 def merge_struct_comp(struct_list):
     # goal
     combined_comp = {}
     all_comps = []
-
-    # get all compositions from struct_list
     for tmp_struct in struct_list:
         if tmp_struct.get('amount', '1.0') != '1.0':
             # multiply by coefficient if amount is not 1
@@ -91,7 +90,6 @@ def merge_struct_comp(struct_list):
         else:
             all_comps.append(tmp_struct['elements'])
 
-    # combine all composition from struct_list
     for tmp_comp in all_comps:
         for k, v in tmp_comp.items():
             if k not in combined_comp:
@@ -99,7 +97,6 @@ def merge_struct_comp(struct_list):
             else:
                 combined_comp[k] += (' + ' + v)
     return combined_comp
-
 
 def count_metal_ele(material_text, para_text):
     metal_ele_num = 0
@@ -114,7 +111,6 @@ def count_metal_ele(material_text, para_text):
 def get_ele_feature(material_text, para_text):
     metal_ele_num = 0
     only_CHO = 0
-    material_text = material_text.strip()
     parsed_material = parse_material(material_text, para_text)
     if parsed_material['composition']:
         ele_set = set(parsed_material['composition'].keys())
@@ -135,14 +131,18 @@ def get_ele_features(input_tokens, original_para_text):
         if t['text'] == '<MAT>':
             mat_text = original_para_text[t['start']: t['end']] 
             metal_ele_num, only_CHO = get_ele_feature(material_text=mat_text, para_text=original_para_text)
-            metal_ele_nums.append([metal_ele_num])
-            only_CHOs.append([only_CHO])
+            metal_ele_nums.append(metal_ele_num)
+            only_CHOs.append(only_CHO)
         else:
-            metal_ele_nums.append([0])
-            only_CHOs.append([0])
+            metal_ele_nums.append(0)
+            only_CHOs.append(0)
     return metal_ele_nums, only_CHOs
 
 
 if __name__ == '__main__':
     print(get_ele_feature('ethanol', 'LiMnO2 (LMO) is synthesized from Li2CO3, Fe2O3, and H3PO4.'))
     print(get_ele_feature('Li2CO3', 'LiMnO2 (LMO) is synthesized from Li2CO3, Fe2O3, and H3PO4.'))
+    print(get_ele_feature('LiMnO2', 'LiMnO2 (LMO) is synthesized from Li2CO3, Fe2O3, and H3PO4.'))
+    print(get_ele_feature('LMO', 'LiMnO2 (LMO) is synthesized from Li2CO3, Fe2O3, and H3PO4.'))
+    print(get_ele_feature('Mg(OH)2·4(MgCO3)·5H2O', 'LiMnO2 (LMO) is synthesized from Li2CO3, Fe2O3, and H3PO4.'))
+    print(get_ele_features([{'text': '<MAT>', 'start' : 0, 'end': 6 }], 'LiMnO2 (LMO) is synthesized from Li2CO3, Fe2O3, and H3PO4.'))

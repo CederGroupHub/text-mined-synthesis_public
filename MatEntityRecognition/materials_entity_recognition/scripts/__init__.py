@@ -1,3 +1,5 @@
+# -*- coding: utf-8 -*-
+# from .model_framework import NERModel
 from .mat_models import MatIdentification
 from .mat_models import MatRecognition
 from .mat_models import MatTPIdentification

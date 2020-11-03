@@ -1,0 +1,5 @@
+tensorflow>=2.1
+tensorflow-addons>=0.8
+Materials_Parser
+transformers
+torch
