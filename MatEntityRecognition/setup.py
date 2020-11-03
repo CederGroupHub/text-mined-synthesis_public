@@ -11,8 +11,14 @@ if __name__ == "__main__":
           author_email="tanjin_he@berkeley.edu",
           license="MIT License",
           packages=find_packages(),
+          include_package_data=True,
           install_requires=[
               'tensorflow-gpu>=2.1',
               'tensorflow-addons>=0.8',
+              'spacy',
+              'chemdataextractor',
+              'numpy',
+              'transformers',
+              'torch',
           ],
           zip_safe=False)
