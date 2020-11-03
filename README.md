@@ -13,6 +13,10 @@ Dataset:
 Paragraphs classification:
 
  - Huo, H., Rong, Z., Kononova, O., Sun, W., Botari, T., He, T., Tshitoyan, V. and Ceder, G., 2019. Semi-supervised machine-learning classification of materials synthesis procedures. npj Computational Materials, 5(1), p.62.
+
+Materials Entity Recognition (MER):
+
+ - He, T., Sun, W., Huo, H., Kononova, O., Rong, Z., Tshitoyan, V., Botari, T. and Ceder, G., 2020. Similarity of Precursors in Solid-State Synthesis as Text-Mined from Scientific Literature. Chemistry of Materials, 32(18), pp.7861-7873.
  
 ## Versions
 
