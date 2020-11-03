@@ -30,5 +30,5 @@ if __name__ == "__main__":
     for tmp_para in paras:
         CDE_para = CDE.doc.Paragraph(tmp_para)
         pre_tokens = [tmp_sent.tokens for tmp_sent in CDE_para] 
-        all_materials, precursors, targets, other_materials = model_new.mat_recognize(tmp_para, pre_tokens=pre_tokens)
+        result = model_new.mat_recognize(tmp_para, pre_tokens=pre_tokens)
 

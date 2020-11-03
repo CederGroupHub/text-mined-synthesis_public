@@ -261,3 +261,19 @@ def create_input(data, parameters, add_label, singletons=None):
     return input
 
 
+def find_one_entity_token_ids(sent_tokens, entity, start_to_calibrate=False):
+    ids = []
+    if 'token_ids' not in entity and start_to_calibrate:
+        entity['start'] += sent_tokens[0]['start']
+        entity['end'] += sent_tokens[0]['start']
+    for i, t in enumerate(sent_tokens):
+        if (t['start'] >= entity['start'] and t['end'] <= entity['end']):
+            ids.append(i)
+    if 'token_ids' in entity:
+        assert ids == entity['token_ids']
+    assert sent_tokens[ids[0]]['start'] == entity['start']
+    assert sent_tokens[ids[-1]]['end'] == entity['end']
+    entity['token_ids'] = ids
+    return ids
+
+

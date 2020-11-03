@@ -4,7 +4,7 @@ import os
 
 from .model import Model
 from .loader import prepare_sentence
-from .utils import create_input, iobes_iob
+from .utils import create_input, iobes_iob, find_one_entity_token_ids
 
 __author__ = 'Tanjin He'
 __maintainer__ = 'Tanjin He, Ziqin (Shaun) Rong'
@@ -64,7 +64,6 @@ class MatIdentification(object):
         if self.parameters['crf']:
             tags_scores, output = self.f_eval(*input)
             y_preds = np.array(output)[1:-1]
-            # y_preds = np.array(self.f_eval(*input))[1:-1]
         else:
             y_preds = self.f_eval(*input).argmax(axis=1)
         y_preds = [self.model.id_to_tag[y_pred] for y_pred in y_preds]
@@ -75,9 +74,11 @@ class MatIdentification(object):
                 y_pred == 'B-Mat'
                 # or (y_pred == 'I-Mat' and mat_begin == False)
             ):
-                materials.append(input_sent[tmp_index])
+                materials.append(input_sent[tmp_index].copy())
+                materials[-1]['token_ids'] = [tmp_index, ]
                 mat_begin = True
             elif y_pred == 'I-Mat' and mat_begin == True:
+                materials[-1]['token_ids'].append(tmp_index)
                 materials[-1]['end'] = input_sent[tmp_index]['end']
                 materials[-1]['text'] += ' ' + input_sent[tmp_index]['text']
             else:
@@ -94,23 +95,23 @@ class MatIdentification(object):
 		:return materials: dict containing materials from CDE (dict['CDE']) and materials from LSTM (dict['LSTM'])
 		"""
         # goal
-        materials = {}
+        result = []
 
         all_sents = []
-        materials['LSTM'] = []
         if pre_tokens == None:
             # CDE tokenization
             CDE_para = CDE.doc.Paragraph(input_para)
-            materials['CDE'] = [{'text': tmp_cem.text, 'start': tmp_cem.start, 'end': tmp_cem.end} \
-                                for tmp_cem in CDE_para.cems]
             for tmp_sent in CDE_para:
                 # prepare input sentences for LSTM
                 input_sent = [
-                    {'text': tmp_token.text, 'start': tmp_token.start, 'end': tmp_token.end, 'sentence': tmp_sent.text} \
-                    for tmp_token in tmp_sent.tokens]
+                    {
+                        'text': tmp_token.text,
+                        'start': tmp_token.start,
+                        'end': tmp_token.end,
+                    } for tmp_token in tmp_sent.tokens
+                ]
                 all_sents.append(input_sent)
         else:
-            materials['CDE'] = []
             # get tokens in dict style
             token_style = None
             if len(pre_tokens) > 0 and len(pre_tokens[0]) > 0:
@@ -138,15 +139,21 @@ class MatIdentification(object):
                 all_sents = []
 
         for input_sent in all_sents:
-                input_sent = list(filter(lambda tmp_token: tmp_token['text'].strip() != '', input_sent))
-                # use LSTM to identify materials
-                materials['LSTM'].extend(self.mat_identify_sent(input_sent))
+            input_sent = list(filter(
+                lambda tmp_token: tmp_token['text'].strip() != '', 
+                input_sent
+            ))
+            # use LSTM to identify materials
+            result.append({
+                'sentence': input_para[input_sent[0]['start']: input_sent[-1]['end']],
+                'tokens': input_sent,
+                'materials': self.mat_identify_sent(input_sent),
+            })
+            # reformated as the exact words in the original paragraph
+            for tmp_mat in result[-1]['materials']:
+                tmp_mat['text'] = input_para[tmp_mat['start']: tmp_mat['end']]
 
-        # reformated as the exact words in the original paragraph
-        for tmp_mat in materials['LSTM']:
-            tmp_mat['text'] = input_para[tmp_mat['start']: tmp_mat['end']]
-
-        return materials
+        return result
 
 
 class MatTPIdentification(object):
@@ -395,7 +402,7 @@ class MatRecognition(object):
 		Recognize target/precursor in a paragraph, which is plain text.
 		
         :param input_para: str representing a paragraph
-        :param materials: list of materials tokens. If none, use default LSTM model to get materials tokens.
+        :param materials: list of list of materials in each sentence. If none, use default LSTM model to get materials tokens.
         :param pre_tokens: list of list of tokens. Each list inside is a sentence.
                             If none, use CDE to get tokens.
 		:return mat_to_recognize: list of all materials
@@ -404,29 +411,27 @@ class MatRecognition(object):
         :return other_materials: list of all materials other than targets and precursors
 		"""
         # goal
-        mat_to_recognize = []
-        precursors = []
-        targets = []
-        other_materials = []
+        result = []
 
         # if no materials given, use identify_model to generate default materials
         if materials == None:
             if pre_tokens == None:
-                mat_to_recognize = self.identify_model.mat_identify(input_para)['LSTM']
+                mat_to_recognize = self.identify_model.mat_identify(input_para)
             else:
-                mat_to_recognize = self.identify_model.mat_identify(input_para, pre_tokens=pre_tokens)['LSTM']
+                mat_to_recognize = self.identify_model.mat_identify(input_para, pre_tokens=pre_tokens)
         else:
             mat_to_recognize = materials
-
+        materials_copy =sum([r['materials'] for r in mat_to_recognize], [])
         all_sents = []
+        all_SL_sents = []
         if pre_tokens == None:
             # CDE tokenization
             CDE_para = CDE.doc.Paragraph(input_para)
-            materials_copy = mat_to_recognize.copy()
 
             for tmp_sent in CDE_para:
                 # prepare input sentences for LSTM
                 input_sent = []
+                input_SL_sent = []
                 tag_started = False
                 for t in tmp_sent.tokens:
                     tmp_token = {'text': t.text, 'start': t.start, 'end': t.end}
@@ -448,15 +453,19 @@ class MatRecognition(object):
                             elif tag_started:
                                 NER_label = 'I-Mat'
                     if NER_label == 'O':
-                        input_sent.append(tmp_token)
+                        input_SL_sent.append(tmp_token.copy())
                     elif NER_label == 'B-Mat':
-                        input_sent.append({'text': '<MAT>', 'start': materials_copy[0]['start'], \
-                                           'end': materials_copy[0]['end'], 'sentence': tmp_sent.text})
+                        input_SL_sent.append({
+                            'text': '<MAT>', 
+                            'start': materials_copy[0]['start'], 
+                            'end': materials_copy[0]['end'],
+                        })
                     else:
                         pass
+                    input_sent.append(tmp_token)
                 all_sents.append(input_sent)
+                all_SL_sents.append(input_SL_sent)
         else:
-            materials_copy = mat_to_recognize.copy()
             # get tokens in dict style
             token_style = None
             all_tokens = []
@@ -487,6 +496,7 @@ class MatRecognition(object):
             for tmp_sent in all_tokens:
                 # prepare input sentences for LSTM
                 input_sent = []
+                input_SL_sent = []
                 tag_started = False
                 for tmp_token in tmp_sent:
                     if tmp_token['text'].strip() == '':
@@ -507,29 +517,41 @@ class MatRecognition(object):
                             elif tag_started:
                                 NER_label = 'I-Mat'
                     if NER_label == 'O':
-                        input_sent.append(tmp_token)
+                        input_SL_sent.append(tmp_token.copy())
                     elif NER_label == 'B-Mat':
-                        input_sent.append({'text': '<MAT>', 'start': materials_copy[0]['start'], \
-                                           'end': materials_copy[0]['end']})
+                        input_SL_sent.append({
+                            'text': '<MAT>', 
+                            'start': materials_copy[0]['start'], 
+                            'end': materials_copy[0]['end'],
+                        })
                     else:
                         pass
+                    input_sent.append(tmp_token)
                 all_sents.append(input_sent)
+                all_SL_sents.append(input_SL_sent)
 
-        for input_sent in all_sents:
+        for i, input_SL_sent in enumerate(all_SL_sents):
+            input_sent = all_sents[i]
+            sent_text = input_para[input_sent[0]['start']: input_sent[-1]['end']]
             if self.parameters['has_CHO'] or self.parameters['ele_num']:    
-                recognitionResult = self.mat_recognize_sent(input_sent, ori_para_text=input_para)
+                recognitionResult = self.mat_recognize_sent(input_SL_sent, ori_para_text=input_para)
             else:
-                recognitionResult = self.mat_recognize_sent(input_sent)
-            precursors.extend([input_sent[tmp_index] for tmp_index in recognitionResult['precursors']])
-            targets.extend([input_sent[tmp_index] for tmp_index in recognitionResult['targets']])
-            other_materials.extend([input_sent[tmp_index] for tmp_index in recognitionResult['other_materials']])
-        # reformated as the exact words in the original paragraph
-        for tmp_mat in precursors + targets + other_materials:
-            # debug
-            # tmp_mat['text'] = 'test'
-            tmp_mat['text'] = input_para[tmp_mat['start']: tmp_mat['end']]
+                recognitionResult = self.mat_recognize_sent(input_SL_sent)
+            result.append({
+                'sentence': sent_text,
+                'tokens': input_sent,
+                'all_materials': mat_to_recognize[i]['materials'],
+                'targets': [input_SL_sent[tmp_index] for tmp_index in recognitionResult['targets']],
+                'precursors': [input_SL_sent[tmp_index] for tmp_index in recognitionResult['precursors']],
+                'other_materials': [input_SL_sent[tmp_index] for tmp_index in recognitionResult['other_materials']],
+            })
+            # reformated as the exact words in the original paragraph
+            for mat_type in {'all_materials', 'precursors', 'targets', 'other_materials'}:
+                for tmp_mat in result[-1][mat_type]:
+                    find_one_entity_token_ids(input_sent, tmp_mat)
+                    tmp_mat['text'] = input_para[tmp_mat['start']: tmp_mat['end']]
 
-        return mat_to_recognize, precursors, targets, other_materials
+        return result
 
 
 class MatIdentificationBagging(MatIdentification):
