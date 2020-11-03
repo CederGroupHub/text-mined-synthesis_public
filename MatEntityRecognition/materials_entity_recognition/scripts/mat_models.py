@@ -355,36 +355,22 @@ class MatRecognition(object):
         recognitionResult = {'precursors': [], 'targets': [], 'other_materials': []}
         # Prepare input
         words = [tmp_token['text'] for tmp_token in input_sent]
-        if self.parameters['keyword_dim'] != 0:
-            sentence = prepare_sentence(words, self.word_to_id, self.char_to_id, \
-                                        lower=self.parameters['lower'], use_key_word=True)
-        elif self.parameters['topic_dim'] != 0:
-            sentence = prepare_sentence(words, self.word_to_id, self.char_to_id, \
-                                        lower=self.parameters['lower'], use_topic=True)
-        elif self.parameters['has_CHO'] or self.parameters['ele_num']:    
-            sentence = prepare_sentence(words, self.word_to_id, self.char_to_id, \
-                                        lower=self.parameters['lower'], \
-                                        use_key_word=False, use_topic=False, \
-                                        use_CHO=self.parameters['has_CHO'], use_eleNum=self.parameters['ele_num'], \
-                                        input_tokens=input_sent, original_para_text=ori_para_text)
+        if self.parameters['has_CHO'] or self.parameters['ele_num']:
+            sentence = prepare_sentence(words,
+                                        self.word_to_id,
+                                        self.char_to_id,
+                                        lower=self.parameters['lower'],
+                                        use_CHO=self.parameters['has_CHO'],
+                                        use_eleNum=self.parameters['ele_num'],
+                                        input_tokens=input_sent,
+                                        original_para_text=ori_para_text)
         else:
-            sentence = prepare_sentence(words, self.word_to_id, self.char_to_id, \
-                                        lower=self.parameters['lower'], \
-                                        use_key_word=False, use_topic=False, use_CHO=False, use_eleNum=False)          
-        # use_key_word = False
-        # use_topic = False
-        # use_CHO
-        # use_eleNum
-        # usePos
-        # if self.parameters.get('keyword_dim', 0) != 0:
-        #     use_key_word = True
-
-
-        # sentence = prepare_sentence(words, self.word_to_id, self.char_to_id, 
-        #                             lower=self.parameters['lower'], 
-        #                             use_key_word=(self.parameters['keyword_dim'] != 0),
-        #                             use_topic=(self.parameters['topic_dim'] != 0),
-        #                             )
+            sentence = prepare_sentence(words,
+                                        self.word_to_id,
+                                        self.char_to_id,
+                                        lower=self.parameters['lower'],
+                                        use_CHO=False,
+                                        use_eleNum=False)
         input = create_input(sentence, self.parameters, False)
         # Prediction
         if self.parameters['crf']:
@@ -719,22 +705,22 @@ class MatRecognitionBagging(MatRecognition):
         words = [tmp_token['text'] for tmp_token in input_sent]
         for tmp_model in self.recognition_models:
             # Prepare input
-            if tmp_model.parameters['keyword_dim'] != 0:
-                sentence = prepare_sentence(words, tmp_model.word_to_id, tmp_model.char_to_id, \
-                                            lower=tmp_model.parameters['lower'], use_key_word=True)
-            elif tmp_model.parameters['topic_dim'] != 0:
-                sentence = prepare_sentence(words, tmp_model.word_to_id, tmp_model.char_to_id, \
-                                            lower=tmp_model.parameters['lower'], use_topic=True)
-            elif tmp_model.parameters['has_CHO'] or tmp_model.parameters['ele_num']:
-                sentence = prepare_sentence(words, tmp_model.word_to_id, tmp_model.char_to_id, \
-                                            lower=tmp_model.parameters['lower'], \
-                                            use_key_word=False, use_topic=False, \
-                                            use_CHO=tmp_model.parameters['has_CHO'], use_eleNum=tmp_model.parameters['ele_num'], \
-                                            input_tokens=input_sent, original_para_text=ori_para_text)
+            if tmp_model.parameters['has_CHO'] or tmp_model.parameters['ele_num']:
+                sentence = prepare_sentence(words,
+                                            tmp_model.word_to_id,
+                                            tmp_model.char_to_id,
+                                            lower=tmp_model.parameters['lower'],
+                                            use_CHO=tmp_model.parameters['has_CHO'],
+                                            use_eleNum=tmp_model.parameters['ele_num'],
+                                            input_tokens=input_sent,
+                                            original_para_text=ori_para_text)
             else:
-                sentence = prepare_sentence(words, tmp_model.word_to_id, tmp_model.char_to_id, \
-                                            lower=tmp_model.parameters['lower'], \
-                                            use_key_word=False, use_topic=False, use_CHO=False, use_eleNum=False)
+                sentence = prepare_sentence(words,
+                                            tmp_model.word_to_id,
+                                            tmp_model.char_to_id,
+                                            lower=tmp_model.parameters['lower'],
+                                            use_CHO=False,
+                                            use_eleNum=False)
 
             input = create_input(sentence, tmp_model.parameters, False)
             # Prediction
