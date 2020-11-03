@@ -2,7 +2,6 @@ import json
 from pprint import pprint
 
 from materials_entity_recognition import MatRecognition
-from materials_entity_recognition import MatRecognitionBagging
 from materials_entity_recognition import MatIdentification
 
 __author__ = 'Tanjin He'
@@ -21,8 +20,7 @@ if __name__ == "__main__":
 	# 	pprint(result)
 
 	# find targets/precursors
-	# model_new = MatRecognition()
-	model_new = MatRecognitionBagging()
+	model_new = MatRecognition()
 	for tmp_para in paras:
 		result = model_new.mat_recognize(tmp_para)
 		pprint(result)
