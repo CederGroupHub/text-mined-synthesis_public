@@ -62,14 +62,19 @@ class MatIdentification(object):
         input = create_input(sentence, self.parameters, False)
         # Prediction
         if self.parameters['crf']:
-            y_preds = np.array(self.f_eval(*input))[1:-1]
+            tags_scores, output = self.f_eval(*input)
+            y_preds = np.array(output)[1:-1]
+            # y_preds = np.array(self.f_eval(*input))[1:-1]
         else:
             y_preds = self.f_eval(*input).argmax(axis=1)
         y_preds = [self.model.id_to_tag[y_pred] for y_pred in y_preds]
         y_preds = iobes_iob(y_preds)
         mat_begin = False
         for tmp_index, y_pred in enumerate(y_preds):
-            if y_pred == 'B-Mat':
+            if (
+                y_pred == 'B-Mat'
+                # or (y_pred == 'I-Mat' and mat_begin == False)
+            ):
                 materials.append(input_sent[tmp_index])
                 mat_begin = True
             elif y_pred == 'I-Mat' and mat_begin == True:
@@ -197,7 +202,8 @@ class MatTPIdentification(object):
         input = create_input(sentence, self.parameters, False)
         # Prediction
         if self.parameters['crf']:
-            y_preds = np.array(self.f_eval(*input))[1:-1]
+            tags_scores, output = self.f_eval(*input)
+            y_preds = np.array(output)[1:-1]
         else:
             y_preds = self.f_eval(*input).argmax(axis=1)
         y_preds = [self.model.id_to_tag[y_pred] for y_pred in y_preds]
@@ -286,7 +292,7 @@ class MatTPIdentification(object):
         return all_materials, precursors, targets, other_materials
 
 
-class MatRecognition():
+class MatRecognition(object):
     """
 	Use LSTM for materials recognition
 	"""
@@ -382,7 +388,8 @@ class MatRecognition():
         input = create_input(sentence, self.parameters, False)
         # Prediction
         if self.parameters['crf']:
-            y_preds = np.array(self.f_eval(*input))[1:-1]
+            tags_scores, output = self.f_eval(*input)
+            y_preds = np.array(output)[1:-1]
         else:
             y_preds = self.f_eval(*input).argmax(axis=1)
         y_preds = [self.model.id_to_tag[y_pred] for y_pred in y_preds]
@@ -537,3 +544,369 @@ class MatRecognition():
             tmp_mat['text'] = input_para[tmp_mat['start']: tmp_mat['end']]
 
         return mat_to_recognize, precursors, targets, other_materials
+
+
+class MatIdentificationBagging(MatIdentification):
+    """
+    Use LSTM for materials identification
+    """
+
+    def __init__(self, model_path=None, bagging=[]):
+        """
+        :param model_path: path to the model for materials recognition. If None input, default initialize.
+        """
+        self.identify_models = []
+        if bagging:
+            for tmp_path in bagging:
+                self.identify_models.append(
+                    MatIdentification(
+                        model_path=tmp_path,
+                        )
+                    )
+        else:
+            self.identify_models.append(
+                MatIdentification(
+                    model_path=model_path,
+                    )
+                )
+
+    def mat_identify_sent(self, input_sent):
+        """
+        Identify materials in a sentence, which is a list of tokens.
+
+        :param input_sent: list of tokens representing a sentence
+        :return materials: list of materials from LSTM
+        """
+        # goal
+        materials = []
+
+        all_y_preds = []
+        all_tags_scores = []
+
+        standard_id_to_tag = self.identify_models[0].model.id_to_tag
+        standard_tag_to_id = {v:k for (k, v) in standard_id_to_tag.items()}
+
+        words = [tmp_token['text'] for tmp_token in input_sent]
+        for tmp_model in self.identify_models:
+            # Prepare input
+            sentence = prepare_sentence(words, tmp_model.word_to_id, tmp_model.char_to_id,
+                                        lower=tmp_model.parameters['lower'])
+            input = create_input(sentence, tmp_model.parameters, False)
+            # Prediction
+            if tmp_model.parameters['crf']:
+                tags_scores, output = tmp_model.f_eval(*input)
+                tags_scores_exp = np.exp(tags_scores)
+                tags_scores_normalized = tags_scores_exp / np.sum(tags_scores_exp, axis=1)[:,None]
+                old_ids = sorted(tmp_model.model.id_to_tag.keys())
+                new_ids = [
+                    standard_tag_to_id[
+                        tmp_model.model.id_to_tag[
+                            tmp_old_id
+                        ]
+                    ]
+                    for tmp_old_id in old_ids
+                ]
+                tags_scores_normalized[:, new_ids] = tags_scores_normalized[:, old_ids]
+                all_tags_scores.append(tags_scores_normalized)
+                y_preds = np.array(output)[1:-1]
+                # y_preds = np.array(tmp_model.f_eval(*input))[1:-1]
+            else:
+                y_preds = tmp_model.f_eval(*input).argmax(axis=1)
+
+            y_preds_score = np.zeros((len(y_preds), len(tmp_model.model.id_to_tag)))
+            for i, y_pred in enumerate(y_preds):
+                y_preds_score[
+                    i,
+                    standard_tag_to_id[
+                        tmp_model.model.id_to_tag[y_pred]
+                        ]
+                ] = 1.0
+
+            all_y_preds.append(y_preds_score)
+
+        # bagging
+        bagged_ids = []
+        all_y_preds = sum(all_y_preds)
+        if all_tags_scores:
+            all_tags_scores = sum(all_tags_scores)
+        sequence_len = len(all_y_preds)
+        for i in range(sequence_len):
+            sorted_y_preds = sorted(all_y_preds[i], reverse=True)
+            if (sorted_y_preds[0] == sorted_y_preds[1]) \
+                and (len(all_tags_scores) > 0):
+                bagged_ids.append(np.argmax(all_tags_scores[i]))
+            else:
+                bagged_ids.append(np.argmax(all_y_preds[i]))
+        y_preds = [standard_id_to_tag[tmp_id] for tmp_id in bagged_ids]
+
+        # result
+        y_preds = iobes_iob(y_preds)
+        mat_begin = False
+        for tmp_index, y_pred in enumerate(y_preds):
+            if y_pred == 'B-Mat':
+                materials.append(input_sent[tmp_index])
+                mat_begin = True
+            elif y_pred == 'I-Mat' and mat_begin == True:
+                materials[-1]['end'] = input_sent[tmp_index]['end']
+                materials[-1]['text'] += ' ' + input_sent[tmp_index]['text']
+            else:
+                mat_begin = False
+        return materials
+
+
+class MatRecognitionBagging(MatRecognition):
+    """
+    Use LSTM for materials recognition
+    """
+
+    def __init__(self, model_path=None,
+                    mat_identify_model_path=None,
+                    parse_dependency=False, use_topic=False,
+                    bagging=[], mat_identify_bagging=[]):
+        """
+        :param model_path: path to the model for materials recognition. If None input, default initialize.
+        :param mat_identify_model_path: path to the model for materials identification. If None input, default initialize.
+        :param parse_dependency: parse dependency or not. If True, the parsed dependency will be used as the key word feature.
+        """
+        self.recognition_models = []
+
+        if bagging:
+            for tmp_path in bagging:
+                self.recognition_models.append(
+                    MatRecognition(
+                        model_path=tmp_path,
+                        mat_identify_model_path=mat_identify_model_path,
+                        parse_dependency=parse_dependency,
+                        use_topic=use_topic,
+                        )
+                    )
+        else:
+            self.recognition_models.append(
+                MatRecognition(
+                    model_path=model_path,
+                    mat_identify_model_path=mat_identify_model_path,
+                    parse_dependency=parse_dependency,
+                    use_topic=use_topic,
+                    )
+                )
+
+        self.parameters = self.recognition_models[0].parameters.copy()
+        valid_keys = {'has_CHO', 'ele_num'}
+        self.parameters = dict(filter(lambda x: x[0] in valid_keys, self.parameters.items()))
+
+        self.identify_model = MatIdentificationBagging(
+            model_path=mat_identify_model_path,
+            bagging=mat_identify_bagging,
+            )
+
+
+    def mat_recognize_sent(self, input_sent, ori_para_text=''):
+        """
+        Recognize target/precursor in a sentence, which is a list of tokens.
+
+        :param input_sent: list of tokens representing a sentence
+        :return recognitionResult: dict containing keys of precursors, targets, and other materials,
+                the value of each one is a list of index of token in the sentence
+        """
+        # goal
+        recognitionResult = {'precursors': [], 'targets': [], 'other_materials': []}
+        all_y_preds = []
+        all_tags_scores = []
+
+        standard_id_to_tag = self.recognition_models[0].model.id_to_tag
+        standard_tag_to_id = {v:k for (k, v) in standard_id_to_tag.items()}
+
+        words = [tmp_token['text'] for tmp_token in input_sent]
+        for tmp_model in self.recognition_models:
+            # Prepare input
+            if tmp_model.parameters['keyword_dim'] != 0:
+                sentence = prepare_sentence(words, tmp_model.word_to_id, tmp_model.char_to_id, \
+                                            lower=tmp_model.parameters['lower'], use_key_word=True)
+            elif tmp_model.parameters['topic_dim'] != 0:
+                sentence = prepare_sentence(words, tmp_model.word_to_id, tmp_model.char_to_id, \
+                                            lower=tmp_model.parameters['lower'], use_topic=True)
+            elif tmp_model.parameters['has_CHO'] or tmp_model.parameters['ele_num']:
+                sentence = prepare_sentence(words, tmp_model.word_to_id, tmp_model.char_to_id, \
+                                            lower=tmp_model.parameters['lower'], \
+                                            use_key_word=False, use_topic=False, \
+                                            use_CHO=tmp_model.parameters['has_CHO'], use_eleNum=tmp_model.parameters['ele_num'], \
+                                            input_tokens=input_sent, original_para_text=ori_para_text)
+            else:
+                sentence = prepare_sentence(words, tmp_model.word_to_id, tmp_model.char_to_id, \
+                                            lower=tmp_model.parameters['lower'], \
+                                            use_key_word=False, use_topic=False, use_CHO=False, use_eleNum=False)
+
+            input = create_input(sentence, tmp_model.parameters, False)
+            # Prediction
+            if tmp_model.parameters['crf']:
+                tags_scores, output = tmp_model.f_eval(*input)
+                tags_scores_exp = np.exp(tags_scores)
+                tags_scores_normalized = tags_scores_exp / np.sum(tags_scores_exp, axis=1)[:,None]
+                old_ids = sorted(tmp_model.model.id_to_tag.keys())
+                new_ids = [
+                    standard_tag_to_id[
+                        tmp_model.model.id_to_tag[
+                            tmp_old_id
+                        ]
+                    ]
+                    for tmp_old_id in old_ids
+                ]
+                tags_scores_normalized[:, new_ids] = tags_scores_normalized[:, old_ids]
+                all_tags_scores.append(tags_scores_normalized)
+                y_preds = np.array(output)[1:-1]
+                # y_preds = np.array(tmp_model.f_eval(*input))[1:-1]
+            else:
+                y_preds = tmp_model.f_eval(*input).argmax(axis=1)
+
+            y_preds_score = np.zeros((len(y_preds), len(tmp_model.model.id_to_tag)))
+            for i, y_pred in enumerate(y_preds):
+                y_preds_score[
+                    i,
+                    standard_tag_to_id[
+                        tmp_model.model.id_to_tag[y_pred]
+                        ]
+                ] = 1.0
+
+            all_y_preds.append(y_preds_score)
+
+        # bagging
+        bagged_ids = []
+        all_y_preds = sum(all_y_preds)
+        if all_tags_scores:
+            all_tags_scores = sum(all_tags_scores)
+        sequence_len = len(all_y_preds)
+        for i in range(sequence_len):
+            sorted_y_preds = sorted(all_y_preds[i], reverse=True)
+            if (sorted_y_preds[0] == sorted_y_preds[1]) \
+                and (len(all_tags_scores) > 0):
+                bagged_ids.append(np.argmax(all_tags_scores[i]))
+            else:
+                bagged_ids.append(np.argmax(all_y_preds[i]))
+        y_preds = [standard_id_to_tag[tmp_id] for tmp_id in bagged_ids]
+
+        # result
+        y_preds = iobes_iob(y_preds)
+        mat_begin = False
+        for tmp_index, y_pred in enumerate(y_preds):
+            if y_pred == 'B-Pre':
+                recognitionResult['precursors'].append(tmp_index)
+            if y_pred == 'B-Tar':
+                recognitionResult['targets'].append(tmp_index)
+            if y_pred == 'B-Mat':
+                recognitionResult['other_materials'].append(tmp_index)
+        return recognitionResult
+
+
+class MatTPIdentificationBagging(MatTPIdentification):
+    """
+    Use LSTM for materials identification
+    """
+
+    def __init__(self, model_path=None, bagging=[]):
+        """
+        :param model_path: path to the model for materials recognition. If None input, default initialize.
+        """
+        self.matTP_identify_models = []
+        if bagging:
+            for tmp_path in bagging:
+                self.matTP_identify_models.append(
+                    MatTPIdentification(
+                        model_path=tmp_path,
+                        )
+                    )
+        else:
+            self.matTP_identify_models.append(
+                MatTPIdentification(
+                    model_path=model_path,
+                    )
+                )
+
+    def matTP_identify_sent(self, input_sent):
+        """
+        Identify materials in a sentence, which is a list of tokens.
+
+        :param input_sent: list of tokens representing a sentence
+        :return materials: list of materials from LSTM
+        """
+        # goal
+        recognitionResult = {'all_materials': [], 'precursors': [], 'targets': [], 'other_materials': []}
+        type_to_abbr = {'precursors': 'Pre', 'targets': 'Tar', 'other_materials': 'Mat'}
+        abbr_to_type = {v: k for (k, v) in type_to_abbr.items()}
+
+        all_y_preds = []
+        all_tags_scores = []
+
+        standard_id_to_tag = self.matTP_identify_models[0].model.id_to_tag
+        standard_tag_to_id = {v:k for (k, v) in standard_id_to_tag.items()}
+
+        words = [tmp_token['text'] for tmp_token in input_sent]
+        for tmp_model in self.matTP_identify_models:
+            # Prepare input
+            sentence = prepare_sentence(words, tmp_model.word_to_id, tmp_model.char_to_id,
+                                        lower=tmp_model.parameters['lower'])
+            input = create_input(sentence, tmp_model.parameters, False)
+            # Prediction
+            if tmp_model.parameters['crf']:
+                tags_scores, output = tmp_model.f_eval(*input)
+                tags_scores_exp = np.exp(tags_scores)
+                tags_scores_normalized = tags_scores_exp / np.sum(tags_scores_exp, axis=1)[:,None]
+                old_ids = sorted(tmp_model.model.id_to_tag.keys())
+                new_ids = [
+                    standard_tag_to_id[
+                        tmp_model.model.id_to_tag[
+                            tmp_old_id
+                        ]
+                    ]
+                    for tmp_old_id in old_ids
+                ]
+                tags_scores_normalized[:, new_ids] = tags_scores_normalized[:, old_ids]
+                all_tags_scores.append(tags_scores_normalized)
+                y_preds = np.array(output)[1:-1]
+                # y_preds = np.array(tmp_model.f_eval(*input))[1:-1]
+            else:
+                y_preds = tmp_model.f_eval(*input).argmax(axis=1)
+
+            y_preds_score = np.zeros((len(y_preds), len(tmp_model.model.id_to_tag)))
+            for i, y_pred in enumerate(y_preds):
+                y_preds_score[
+                    i,
+                    standard_tag_to_id[
+                        tmp_model.model.id_to_tag[y_pred]
+                        ]
+                ] = 1.0
+
+            all_y_preds.append(y_preds_score)
+
+        # bagging
+        bagged_ids = []
+        all_y_preds = sum(all_y_preds)
+        if all_tags_scores:
+            all_tags_scores = sum(all_tags_scores)
+        sequence_len = len(all_y_preds)
+        for i in range(sequence_len):
+            sorted_y_preds = sorted(all_y_preds[i], reverse=True)
+            if (sorted_y_preds[0] == sorted_y_preds[1]) \
+                and (len(all_tags_scores) > 0):
+                bagged_ids.append(np.argmax(all_tags_scores[i]))
+            else:
+                bagged_ids.append(np.argmax(all_y_preds[i]))
+        y_preds = [standard_id_to_tag[tmp_id] for tmp_id in bagged_ids]
+
+        # result
+        y_preds = iobes_iob(y_preds)
+        mat_begin = None
+        for tmp_index, y_pred in enumerate(y_preds):
+            if y_pred.startswith('B-'):
+                mat_begin = y_pred[2:]
+                recognitionResult['all_materials'].append(input_sent[tmp_index])
+                recognitionResult[abbr_to_type[mat_begin]].append(input_sent[tmp_index])
+            elif y_pred.startswith('I-') and mat_begin == y_pred[2:]:
+                recognitionResult['all_materials'][-1]['end'] = input_sent[tmp_index]['end']
+                recognitionResult['all_materials'][-1]['text'] += ' ' + input_sent[tmp_index]['text']
+                recognitionResult[abbr_to_type[mat_begin]][-1]['end'] = input_sent[tmp_index]['end']
+                recognitionResult[abbr_to_type[mat_begin]][-1]['text'] += ' ' + input_sent[tmp_index]['text']
+            else:
+                mat_begin = None
+
+        return recognitionResult
+

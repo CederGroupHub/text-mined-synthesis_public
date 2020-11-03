@@ -6,7 +6,7 @@ __maintainer__ = 'Tanjin He, Ziqin (Shaun) Rong'
 __email__ = 'tanjin_he@berkeley.edu, rongzq08@gmail.com'
 
 # constant
-mp = MaterialParser(pubchem_lookup=True)
+mp = MaterialParser(pubchem_lookup=False)
 allNonMetalElements = set(['C', 'H', 'O', 'N', 'Cl', 'F', 'P', 'S', 'Br', 'I', 'Se'] + ['He', 'Ne', 'Ar', 'Kr', 'Xe', 'Rn'])
 # element table by symbol of elements
 elementTable = {
@@ -36,7 +36,7 @@ elementTable = {
 'Lv': [116, 'livermorium'],  'Ts': [117, 'tennessine'],  'Og': [118, 'oganesson'],  
 }
 allElements = list(elementTable.keys())
-
+allElements = sorted(allElements, key=lambda ele: len(ele), reverse=True)
 
 def parse_material(material_text, para_text):
     # goal
@@ -55,7 +55,7 @@ def parse_material(material_text, para_text):
     if len(dopants) > 0:
         parsed_material['dopants'] = dopants
     try:
-        # material parser version 6.0.3
+        # material parser version 6.1.0
         list_of_materials = mp.split_materials_list(new_material2)
         list_of_materials = list_of_materials if list_of_materials != [] else [(new_material2, '')]
         tmp_structure = []
@@ -67,8 +67,8 @@ def parse_material(material_text, para_text):
         else:
             # print('unresolved')
             pass
-    except Exception as e:
-        print('Error!', e)
+    except:
+        # print('unresolved')
         pass
     return parsed_material
 
@@ -82,10 +82,6 @@ def merge_struct_comp(struct_list):
 
     # get all compositions from struct_list
     for tmp_struct in struct_list:
-        if (set(tmp_struct['elements'].keys()) == {'H', 'O'}
-            and len(struct_list) > 1):
-            # not take H2O into account
-            continue
         if tmp_struct.get('amount', '1.0') != '1.0':
             # multiply by coefficient if amount is not 1
             tmp_comp = {}
@@ -117,7 +113,8 @@ def count_metal_ele(material_text, para_text):
 # get ele feature for one material
 def get_ele_feature(material_text, para_text):
     metal_ele_num = 0
-    only_CHO = False
+    only_CHO = 0
+    material_text = material_text.strip()
     parsed_material = parse_material(material_text, para_text)
     if parsed_material['composition']:
         ele_set = set(parsed_material['composition'].keys())

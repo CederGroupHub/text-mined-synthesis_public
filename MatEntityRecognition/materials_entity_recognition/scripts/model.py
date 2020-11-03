@@ -187,7 +187,7 @@ class Model(object):
             word_input = word_layer.link(word_ids)
             inputs.append(word_input)
             # Initialize with pretrained embeddings
-            if pre_emb:
+            if pre_emb and training:
                 new_weights = word_layer.embeddings.get_value()
                 print('Loading pretrained embeddings from %s...' % pre_emb)
                 pretrained = {}
@@ -372,7 +372,7 @@ class Model(object):
 
         # Network parameters
         params = []
-        if word_dim and (not pre_emb):
+        if word_dim:
             self.add_component(word_layer)
             params.extend(word_layer.params)
         if char_dim:
@@ -457,8 +457,10 @@ class Model(object):
         else:
             f_eval = theano.function(
                 inputs=eval_inputs,
-                outputs=forward(observations, transitions, viterbi=True,
-                                return_alpha=False, return_best_sequence=True),
+                outputs= [tags_scores, forward(observations, transitions, viterbi=True,
+                                return_alpha=False, return_best_sequence=True),],
+                # outputs=forward(observations, transitions, viterbi=True,
+                                # return_alpha=False, return_best_sequence=True),
                 givens=({is_train: np.cast['int32'](0)} if dropout else {})
             )
 

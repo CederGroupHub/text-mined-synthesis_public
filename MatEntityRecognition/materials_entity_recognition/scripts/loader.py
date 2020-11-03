@@ -140,10 +140,15 @@ def cap_feature(s):
         return 3
 
 
-def prepare_sentence(str_words, word_to_id, char_to_id, lower=False,
-                        use_key_word=False, use_topic=False,
-                        use_CHO=False, use_eleNum=False, input_tokens=[],
-                        original_para_text=''):
+def prepare_sentence(str_words,
+                     word_to_id,
+                     char_to_id,
+                     lower=False,
+                     use_CHO=False,
+                     use_eleNum=False,
+                     input_tokens=[],
+                     original_para_text='',
+                     ):
     """
     Prepare a sentence for evaluation.
 
