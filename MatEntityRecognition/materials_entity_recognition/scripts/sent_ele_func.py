@@ -1,12 +1,14 @@
-from material_parser.material_parser import MaterialParser
-import  regex
+from .utils import found_package
+import regex
 
 __author__ = 'Tanjin He'
 __maintainer__ = 'Tanjin He, Ziqin (Shaun) Rong'
 __email__ = 'tanjin_he@berkeley.edu, rongzq08@gmail.com'
 
 # constant
-mp = MaterialParser(pubchem_lookup=False)
+if found_package('material_parser'):
+    from material_parser.material_parser import MaterialParser
+    mp = MaterialParser(pubchem_lookup=False)
 allNonMetalElements = set(['C', 'H', 'O', 'N', 'Cl', 'F', 'P', 'S', 'Br', 'I', 'Se'] + ['He', 'Ne', 'Ar', 'Kr', 'Xe', 'Rn'])
 # element table by symbol of elements
 elementTable = {

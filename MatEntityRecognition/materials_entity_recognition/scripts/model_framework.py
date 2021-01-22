@@ -6,11 +6,11 @@ import regex
 
 import tensorflow as tf
 from tensorflow import keras
+from transformers import BertConfig, TFBertMainLayer
+
 from .utils import found_package
-if found_package('transformers'):
-    import transformers
-if found_package('tensorflow_addons'):
-    import tensorflow_addons as tfa
+import transformers
+import tensorflow_addons as tfa
 
 from .utils import iobes_iob, parse_lr_method
 from .conlleval_perl import evaluate_lines
@@ -85,13 +85,13 @@ class NERModel(keras.Model):
         """
         super().__init__(**kwargs)
         # Model location
-        if not model_path:
-            parent_folder = os.path.abspath(
-                os.path.join(
-                    os.path.dirname(__file__),
-                    '..'
-                )
+        parent_folder = os.path.abspath(
+            os.path.join(
+                os.path.dirname(__file__),
+                '..'
             )
+        )
+        if not model_path:
             if model_name:
                 self.model_path = os.path.join(parent_folder, 'generated',  model_name)
             else:
@@ -195,25 +195,29 @@ class NERModel(keras.Model):
                 epsilon=lr_method_parameters.get('epsilon', 1e-6),
                 weight_decay_rate=lr_method_parameters.get('weight_decay_rate', 0.01),
             )
-        elif not to_reload_model:
+        else:
             raise ValueError(
                 "Not implemented learning method: {}".format(lr_method_name)
             )
-        else:
-            # TODO: to be removed after all models are trained with new lr schema
-            self.optimizer = keras.optimizers.SGD(
-                learning_rate=lr_method_parameters.get('lr', 0.005),
-            )
+
+        # TODO: to be removed after Huggingface is updated and TF>=2.4 is used.
+        #  This is added due to some incompatibility between keras and huggingface.
+        #  See: https://github.com/huggingface/transformers/issues/6560
+        self.optimizer._HAS_AGGREGATE_GRAD = False
 
         self.loss = PlainLoss(name='loss_layer')
 
         self.create_constants()
         # add layers
         if self.bert_path:
-            self.bert_layer = transformers.TFBertModel.from_pretrained(
-                self.bert_path,
-                from_pt=True,
-            ).bert
+            if to_reload_model:
+                bert_config = BertConfig.from_pretrained(self.bert_path)
+                self.bert_layer = TFBertMainLayer(bert_config, name="bert")
+            else:
+                self.bert_layer = transformers.TFBertModel.from_pretrained(
+                    self.bert_path,
+                    from_pt=True,
+                ).bert
             self.set_bert_trainable_layers(self.bert_layer, self.bert_first_trainable_layer)
 
             assert self.word_dim == 0
@@ -486,12 +490,16 @@ class NERModel(keras.Model):
 
         # bert_path
         if self.bert_path:
-            word_input, _ = self.bert_layer(
+            # note: return_dict=True will be applied by default
+            # it is commeted out because TF says "The parameter `return_dict`
+            # cannot be set in graph mode and will always be set to `True`."
+            bert_output = self.bert_layer(
                 word_ids,
                 attention_mask=inputs['bert_attention_mask'],
-                token_type_ids=inputs['bert_token_type_ids']
+                token_type_ids=inputs['bert_token_type_ids'],
+                # return_dict=True
             )
-            _x.append(word_input)
+            _x.append(bert_output.last_hidden_state)
 
         # word dim
         if self.word_dim:
@@ -815,16 +823,6 @@ class NERModel(keras.Model):
             p_tags = tags_pred[sent_index]
             p_idx = [self.tag_tag_to_idx[t] for t in p_tags]
 
-            if not (
-                len(p_tags) == len(r_tags)
-                and len(r_tags) == len(raw_sentence)
-            ) :
-                print(raw_sentence['text'])
-                print('tokens', raw_sentence)
-                print('p_tags', p_tags)
-                print('r_tags', r_tags)
-                print("len(p_tags), len(r_tags), len(raw_sentence)", len(p_tags), len(r_tags), len(raw_sentence))
-                print()
             assert len(p_tags) == len(r_tags)
             assert len(r_tags) == len(raw_sentence)
 
@@ -886,7 +884,7 @@ class NERModel(keras.Model):
             self.save_weights(self.opt_cp_path)
 
     @classmethod
-    def create_scratch_model(cls, model_path, bert_path=None):
+    def create_scratch_model(cls, model_path, bert_path=None, to_reload_model=True):
         """
         Create model from config file w/o initialization
 
@@ -899,7 +897,7 @@ class NERModel(keras.Model):
         model_config['model_path'] = model_path
         if bert_path:
             model_config['bert_path'] = bert_path
-        model_config['to_reload_model'] = True
+        model_config['to_reload_model'] = to_reload_model
         model = cls(**model_config)
         batch_size = model_config['batch_size']
         # run on one sample to build model
@@ -947,7 +945,8 @@ class NERModel(keras.Model):
         #  rather than whole checkpoint file
         model = NERModel.create_scratch_model(
             model_path=model_path,
-            bert_path=bert_path
+            bert_path=bert_path,
+            to_reload_model=True,
         )
         if cp_path is None:
             cp_path = os.path.join(model_path, 'opt_cp', 'cp.ckpt')

@@ -25,7 +25,7 @@ __email__ = 'tanjin_he@berkeley.edu, rongzq08@gmail.com'
 
 # Modified based on the NER Tagger code from arXiv:1603.01360 [cs.CL]
 
-nlp = spacy.load('en')
+nlp = spacy.load('en_core_web_sm', disable=['parser', 'ner'])
 
 def load_sentences(path, lower, zeros):
     """

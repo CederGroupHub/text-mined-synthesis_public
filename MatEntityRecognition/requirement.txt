@@ -6,4 +6,3 @@ torch
 spacy
 chemdataextractor
 numpy
-

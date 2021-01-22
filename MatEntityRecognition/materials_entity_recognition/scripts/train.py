@@ -116,7 +116,7 @@ def get_argument_parser():
     )
     argparser.add_argument(
         "--char_combine_method",
-        help="Method (concat/sum) used to combine forward and backward "
+        help="Method (concat/sum/tanh) used to combine forward and backward "
              "char embeddings. Only used when char_bidirect is True ",
         default='concat'
     )
@@ -207,17 +207,17 @@ def get_argument_parser():
     argparser.add_argument(
         "--path_train",
         help="path_train",
-        default='dataset/TP_750_1/TP_750_1_00/train.json'
+        default='dataset/TP_750_83_173_232_345_321_438_5/TP_750_83_173_232_345_321_438_5_00/train.json'
     )
     argparser.add_argument(
         "--path_dev",
         help="path_dev",
-        default='dataset/TP_750_1/TP_750_1_00/dev.json'
+        default='dataset/TP_750_83_173_232_345_321_438_5/TP_750_83_173_232_345_321_438_5_00/dev.json'
     )
     argparser.add_argument(
         "--path_test",
         help="path_test",
-        default='dataset/TP_750_1/TP_750_1_00/test.json'
+        default='dataset/TP_750_83_173_232_345_321_438_5/TP_750_83_173_232_345_321_438_5_00/test.json'
     )
     argparser.add_argument(
         "--emb_path", type=str2None,

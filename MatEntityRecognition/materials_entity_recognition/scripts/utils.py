@@ -23,7 +23,7 @@ NEAR_ZERO = 1e-6
 def print_gpu_info():
     gpus = tf.config.experimental.list_physical_devices('GPU')
     logical_gpus = tf.config.experimental.list_logical_devices('GPU')
-    print(len(gpus), "Physical GPUs,", len(logical_gpus), "Logical GPUs")
+    print('print_gpu_info: ', len(gpus), "Physical GPUs,", len(logical_gpus), "Logical GPUs")
 
 def allow_gpu_growth():
     gpus = tf.config.experimental.list_physical_devices('GPU')
@@ -48,7 +48,7 @@ def allow_gpu_growth():
             # for gpu in gpus:
             #     tf.config.experimental.set_memory_growth(gpu, True)
             logical_gpus = tf.config.experimental.list_logical_devices('GPU')
-            print(len(gpus), "Physical GPUs,", len(logical_gpus), "Logical GPUs")
+            print('allow_gpu_growth: ', len(gpus), "Physical GPUs,", len(logical_gpus), "Logical GPUs")
         except RuntimeError as e:
             # Memory growth must be set before GPUs have been initialized
             print(e)
@@ -75,7 +75,7 @@ def found_package(package_name):
     return found
 
 def use_file_as_stdout(file_path):
-    if not os.path.exists(file_path):
+    if not os.path.exists(os.path.dirname(file_path)):
         os.makedirs(os.path.dirname(file_path))
     sys.stdout = open(file_path, 'w')
     sys.stdout = Unbuffered(sys.stdout)

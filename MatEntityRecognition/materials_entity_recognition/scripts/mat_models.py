@@ -3,14 +3,13 @@ from pprint import pprint
 import numpy as np
 import chemdataextractor as CDE
 import os
+import transformers
 
 from .model_framework import NERModel
 from .loader import prepare_sentences
 from .utils import iobes_iob, find_one_entity_token_ids, found_package
 from .pubchem_utils import load_dico, match_mat_in_dico, solve_conflicts
 
-if found_package('transformers'):
-    import transformers
 
 __author__ = 'Tanjin He'
 __maintainer__ = 'Tanjin He, Ziqin (Shaun) Rong'
@@ -22,16 +21,21 @@ class MatIdentification(object):
     Use LSTM for materials identification
     """
 
-    def __init__(self, model_path=None, bert_path=None, pubchem_path=None):
+    def __init__(self, model_path=None, bert_path='default', pubchem_path=None):
         """
         :param model_path: path to the model for materials recognition. If None input, default initialize.
         """
+        file_path = os.path.dirname(__file__)
         if model_path is None:
-            file_path = os.path.dirname(__file__)
-            model_path = os.path.join(file_path, '..', 'models/matIdentification')
-        self.model = NERModel.reload_model(model_path=model_path, bert_path=bert_path)
+            self.model_path = os.path.join(file_path, '..', 'models/matIdentification')
+        else:
+            self.model_path = model_path
+        if bert_path == 'default':
+            self.bert_path = os.path.join(file_path, '..', 'models/Bert_config')
+        else:
+            self.bert_path = bert_path
 
-        self.bert_path = bert_path
+        self.model = NERModel.reload_model(model_path=self.model_path, bert_path=self.bert_path)
         if self.bert_path:
             config_template = 'bert-base-cased'
             self.bert_tokenizer = transformers.BertTokenizerFast.from_pretrained(
@@ -329,11 +333,17 @@ class MatTPIdentification(object):
         """
         :param model_path: path to the model for materials recognition. If None input, default initialize.
         """
+        file_path = os.path.dirname(__file__)
         if model_path is None:
-            file_path = os.path.dirname(__file__)
-            model_path = os.path.join(file_path, '..', 'models/matIdentification')
-        self.model = NERModel.reload_model(model_path=model_path, bert_path=bert_path)
-        self.bert_path = bert_path
+            self.model_path = os.path.join(file_path, '..', 'models/matIdentification')
+        else:
+            self.model_path = model_path
+        if bert_path == 'default':
+            self.bert_path = os.path.join(file_path, '..', 'models/MATBert_config')
+        else:
+            self.bert_path = bert_path
+
+        self.model = NERModel.reload_model(model_path=self.model_path, bert_path=self.bert_path)
         if self.bert_path:
             config_template = 'bert-base-cased'
             self.bert_tokenizer = transformers.BertTokenizerFast.from_pretrained(
@@ -590,19 +600,29 @@ class MatRecognition():
     def __init__(self,
                  model_path=None,
                  mat_identify_model_path=None,
-                 bert_path=None,
+                     bert_path='default',
+                 mat_identify_bert_path='default',
                  pubchem_path=None):
         """
         :param model_path: path to the model for materials recognition. If None input, default initialize.
         :param mat_identify_model_path: path to the model for materials identification. If None input, default initialize.
         :param parse_dependency: parse dependency or not. If True, the parsed dependency will be used as the key word feature.
         """
+        file_path = os.path.dirname(__file__)
         if model_path is None:
-            file_path = os.path.dirname(__file__)
-            model_path = os.path.join(file_path, '..', 'models/matRecognition')
-            print('model_path', os.path.exists(model_path))
-        self.model = NERModel.reload_model(model_path=model_path, bert_path=bert_path)
-        self.bert_path = bert_path
+            self.model_path = os.path.join(file_path, '..', 'models/matRecognition')
+        else:
+            self.model_path = model_path
+        if bert_path == 'default':
+            self.bert_path = os.path.join(file_path, '..', 'models/MATBert_config')
+        else:
+            self.bert_path = bert_path
+        if mat_identify_bert_path is not None:
+            self.mat_identify_bert_path = mat_identify_bert_path
+        else:
+            self.mat_identify_bert_path = self.bert_path
+
+        self.model = NERModel.reload_model(model_path=self.model_path, bert_path=self.bert_path)
         if self.bert_path:
             config_template = 'bert-base-cased'
             self.bert_tokenizer = transformers.BertTokenizerFast.from_pretrained(
@@ -632,7 +652,7 @@ class MatRecognition():
         self.identify_model = MatIdentification(
             model_path=mat_identify_model_path,
             pubchem_path=pubchem_path,
-            bert_path=self.bert_path
+            bert_path=self.mat_identify_bert_path
         )
 
     def mat_recognize_sent(self, input_sent, ori_para_text=''):
@@ -1147,12 +1167,23 @@ class MatRecognitionBagging(MatRecognition):
                  mat_identify_model_path=None,
                  bagging=[],
                  mat_identify_bagging=[],
-                 bert_path=None):
+                 bert_path=None,
+                 mat_identify_bert_path=None,
+                 ):
         """
         :param model_path: path to the model for materials recognition. If None input, default initialize.
         :param mat_identify_model_path: path to the model for materials identification. If None input, default initialize.
         :param parse_dependency: parse dependency or not. If True, the parsed dependency will be used as the key word feature.
         """
+        if mat_identify_bagging:
+            self.mat_identify_model_path = mat_identify_bagging[0]
+        else:
+            self.mat_identify_model_path = mat_identify_model_path
+        if mat_identify_bert_path is not None:
+            self.mat_identify_bert_path = mat_identify_bert_path
+        else:
+            self.mat_identify_bert_path = self.bert_path
+
         self.recognition_models = []
 
         if bagging:
@@ -1160,25 +1191,27 @@ class MatRecognitionBagging(MatRecognition):
                 self.recognition_models.append(
                     MatRecognition(
                         model_path=tmp_path,
-                        mat_identify_model_path=mat_identify_model_path,
+                        mat_identify_model_path=self.mat_identify_model_path,
                         bert_path=bert_path,
+                        mat_identify_bert_path=self.mat_identify_bert_path,
                     )
                 )
         else:
             self.recognition_models.append(
                 MatRecognition(
                     model_path=model_path,
-                    mat_identify_model_path=mat_identify_model_path,
+                    mat_identify_model_path=self.mat_identify_model_path,
                     bert_path=bert_path,
+                    mat_identify_bert_path=self.mat_identify_bert_path,
                 )
             )
         # attention: models should use the same tag_scheme and same tags
         self.get_standard_tags()
 
         self.identify_model = MatIdentificationBagging(
-            model_path=mat_identify_model_path,
+            model_path=self.mat_identify_model_path,
             bagging=mat_identify_bagging,
-            bert_path=bert_path,
+            bert_path=self.mat_identify_bert_path,
         )
 
     def get_standard_tags(self):
