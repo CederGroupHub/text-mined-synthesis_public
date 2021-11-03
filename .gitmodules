@@ -1,6 +1,3 @@
 [submodule "ParagraphClassification/synthesis-paragraph-classifier"]
 	path = ParagraphClassification/synthesis-paragraph-classifier
 	url = https://github.com/CederGroupHub/synthesis-paragraph-classifier.git
-[submodule "MatEntityRecognition/MatEntityRecognition"]
-	path = MatEntityRecognition/MatEntityRecognition
-	url = https://github.com/CederGroupHub/MatEntityRecognition.git
