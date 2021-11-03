@@ -1,2 +1,0 @@
-models/matIdentification/** filter=lfs diff=lfs merge=lfs -text
-models/matRecognition/** filter=lfs diff=lfs merge=lfs -text

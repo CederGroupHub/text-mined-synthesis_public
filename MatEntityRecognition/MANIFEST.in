@@ -1,3 +1,0 @@
-include  README.md
-include materials_entity_recognition/data/*.json
-include materials_entity_recognition/models/*
