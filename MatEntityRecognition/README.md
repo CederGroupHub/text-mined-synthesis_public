@@ -5,7 +5,7 @@ Extract materials from a paragraph, and recognize the targets and precursors in 
 Git submodule is used, please use 
 
 	git submodule init
-	git submodule update –remote 
+	git submodule update --remote 
 
 or visit URL
 
